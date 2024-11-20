@@ -1,0 +1,89 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Train Monitoring System Lambda Functions
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 128
+    Runtime: python3.9
+    Environment:
+      Variables:
+        DB_NAME: !Ref DBName
+        DB_USER: !Ref DBUser
+        DB_HOST: !Ref DBHost
+        DB_PORT: !Ref DBPort
+        # DB_PASSWORD will be retrieved from Secrets Manager in production
+
+Parameters:
+  DBName:
+    Type: String
+    Default: rail
+  DBUser:
+    Type: String
+    Default: train_app_user
+  DBHost:
+    Type: String
+    Default: database-mysql-rail.c34ke24ea9sl.us-east-1.rds.amazonaws.com
+  DBPort:
+    Type: String
+    Default: 3301
+
+Resources:
+  ProcessTrainDetectionFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambda/process_train_detection/
+      Handler: handler.lambda_handler
+      Description: Processes new train detection data and calculates initial probabilities
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - rds-db:connect
+              Resource: !Sub arn:aws:rds-db:${AWS::Region}:${AWS::AccountId}:dbuser:${DBResourceId}/*
+        - S3ReadPolicy:
+            BucketName: !Ref TrainImageBucket
+      Events:
+        NewDetectionAPI:
+          Type: Api
+          Properties:
+            Path: /detection
+            Method: post
+      Runtime: python3.9
+      Layers:
+        - !Ref CommonLayer
+
+  CalculatePredictionsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambda/calculate_predictions/
+      Handler: handler.lambda_handler
+      Description: Calculates train crossing predictions using ML model
+      Policies:
+        - RDSDataExecutionPolicy: {}
+        - SageMakerExecutionPolicy: {}
+      Events:
+        ScheduledPrediction:
+          Type: Schedule
+          Properties:
+            Schedule: rate(1 hour)
+
+  TrainImageBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub ${AWS::StackName}-train-images
+
+  CommonLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: train-monitoring-common
+      Description: Common code for train monitoring
+      ContentUri: packages/train_monitoring_common/
+      CompatibleRuntimes:
+        - python3.9
+
+Outputs:
+  ProcessTrainDetectionApi:
+    Description: API Gateway endpoint URL for Process Train Detection function
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/detection/" 

@@ -1,0 +1,25 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.leaflet-container {
+  height: 100%;
+  width: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+
+/* Override any z-index issues */
+.leaflet-pane {
+  z-index: 1;
+}
+.leaflet-top,
+.leaflet-bottom {
+  z-index: 10;
+}
+
+/* Import Leaflet CSS directly in globals.css */
+@import 'leaflet/dist/leaflet.css';
